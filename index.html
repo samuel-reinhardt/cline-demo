@@ -1,12 +1,48 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
+<head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HTML 5 Boilerplate</title>
+    <title>Image Entry Effect</title>
     <link rel="stylesheet" href="style.css">
-  </head>
-  <body>
-    <script src="index.js"></script>
-  </body>
+    <script src="https://cdn.jsdelivr.net/npm/curtainsjs@8.1.4/dist/curtains.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+</head>
+<body>
+    <div class="content">
+        <section class="spacer">
+            <h1>Scroll Down</h1>
+            <p>The effect will trigger when images become visible</p>
+        </section>
+
+        <section class="image-section">
+            <img src="https://picsum.photos/800/500?random=1" class="entry-effect" alt="Demo Image 1">
+        </section>
+
+        <section class="spacer">
+            <h2>Keep Scrolling</h2>
+            <p>More images below</p>
+        </section>
+
+        <section class="image-section">
+            <img src="https://picsum.photos/800/500?random=2" class="entry-effect" alt="Demo Image 2">
+        </section>
+
+        <section class="spacer">
+            <h2>One More</h2>
+            <p>Try scrolling up and down to see the effect direction change</p>
+        </section>
+
+        <section class="image-section">
+            <img src="https://picsum.photos/800/500?random=3" class="entry-effect" alt="Demo Image 3">
+        </section>
+
+        <section class="spacer">
+            <h2>The End</h2>
+            <p>Scroll back up to see the reverse effect</p>
+        </section>
+    </div>
+
+    <script type="module" src="index.js"></script>
+</body>
 </html>

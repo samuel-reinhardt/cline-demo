@@ -20,12 +20,13 @@ window.addEventListener('load', () => {
         
         uniform mat4 uMVMatrix;
         uniform mat4 uPMatrix;
+        uniform mat4 uTextureMatrix0;
         
         varying vec2 vTextureCoord;
         
         void main() {
             gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);
-            vTextureCoord = aTextureCoord;
+            vTextureCoord = (uTextureMatrix0 * vec4(aTextureCoord, 0.0, 1.0)).xy;
         }
     `;
 
@@ -110,7 +111,7 @@ window.addEventListener('load', () => {
             // no shading
             gl_FragColor = finalColor;
             // Just the image
-            //gl_FragColor = textureColor;
+            //gl_FragColor = texture2D(uSampler0, vTextureCoord);
         }
     `;
 
@@ -145,12 +146,7 @@ window.addEventListener('load', () => {
     // Create planes after curtains is ready
     curtains.onSuccess(() => {
         document.querySelectorAll('.entry-effect').forEach(image => {
-            // Wait for image to load to get dimensions
-            if (image.complete) {
-                createPlane(image);
-            } else {
-                image.onload = () => createPlane(image);
-            }
+            createPlane(image)
         });
     });
 
@@ -211,7 +207,9 @@ window.addEventListener('load', () => {
                 window.addEventListener("scroll", () => {
                     plane.updateScrollPosition();
                 });
-
+                plane.onRender(() => {
+                    // use the onRender method of our plane fired at each requestAnimationFrame call
+                });
                 // Update dimensions on resize
                 window.addEventListener("resize", () => {
                     const newBounds = image.getBoundingClientRect();

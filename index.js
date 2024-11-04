@@ -30,7 +30,7 @@ window.addEventListener('load', () => {
         }
     `;
 
-    // Fragment shader with perspective flip animation
+    // Fragment shader with enhanced 3D flip animation
     const fs = `
         precision mediump float;
         
@@ -41,11 +41,14 @@ window.addEventListener('load', () => {
         uniform float uAnimationProgress;
         uniform sampler2D uSampler0;
         
-        // Pseudo-random function
+        const float PI = 3.14159265359;
+        
+        // Pseudo-random function for color variation
         float random(vec2 co) {
             return fract(sin(dot(co.xy, vec2(12.9898, 78.233))) * 43758.5453);
         }
         
+        // Calculate delay based on distance from origin point
         float calculateDelay(vec2 currentGrid, vec2 originGrid, vec2 maxGrid) {
             vec2 diff = currentGrid - originGrid;
             float distance = sqrt(diff.x * diff.x + diff.y * diff.y);
@@ -62,8 +65,8 @@ window.addEventListener('load', () => {
             vec2 totalGrid = floor(uImageSize / uGridSize);
             float totalRows = totalGrid.y;
             
-            // Origin grid coordinates (top-left)
-            vec2 originGrid = vec2(0.0, totalRows - 1.0);
+            // Origin grid coordinates (center-left)
+            vec2 originGrid = vec2(0.0, totalRows * 0.5);
             
             // Calculate delay based on distance from origin
             float delay = calculateDelay(gridCoord, originGrid, totalGrid);
@@ -71,47 +74,59 @@ window.addEventListener('load', () => {
             // Calculate local animation progress with delay
             float localProgress = clamp((uAnimationProgress - delay) * 1.5, 0.0, 1.0);
             
-            // Calculate rotation angle based on local progress
-            float angle = localProgress * 3.14159;
+            // Calculate rotation angle (0 to PI for 180-degree rotation)
+            float angle = localProgress * PI;
             
             // Center point of the cell
             vec2 center = vec2(0.5);
             
-            // Apply perspective transformation
+            // Apply 3D perspective transformation
             vec2 fromCenter = cellPosition - center;
-            float perspectiveScale = cos(angle) * 0.5 + 0.5; // Creates depth effect
-            fromCenter.x *= perspectiveScale;
-            vec2 perspectivePos = center + fromCenter;
+            
+            // Enhanced perspective effect
+            float perspectiveStrength = 2.0;
+            float z = sin(angle) * perspectiveStrength;
+            float perspective = 1.0 / (1.0 + z * 0.5);
+            
+            // Scale and transform based on rotation
+            fromCenter.x *= cos(angle);
+            vec2 perspectivePos = center + fromCenter * perspective;
             
             // Determine if we're showing front or back
             float isFront = step(0.0, cos(angle));
             
-            // Sample the full texture (not just a portion)
+            // Sample the texture for the back side
             vec4 textureColor = texture2D(uSampler0, vTextureCoord);
             
-            // Define green color
+            // Define green colors for the front side with slight variations
             vec3 greenColor;
             float rnd = random(gridCoord);
             if (rnd < 0.33) {
-                greenColor = vec3(0.0, 0.91, 0.52); // #00e885
+                greenColor = vec3(0.0, 0.91, 0.52); // Bright green
             } else if (rnd < 0.66) {
-                greenColor = vec3(0.0, 0.74, 0.42); // #00BD6B
+                greenColor = vec3(0.0, 0.74, 0.42); // Medium green
             } else {
-                greenColor = vec3(0.0, 0.68, 0.39); // #00ae64
+                greenColor = vec3(0.0, 0.68, 0.39); // Dark green
             }
             
-            // Mix colors based on which side is showing
-            vec4 transparentColor = vec4(0.0, 0.68, 0.39, 0);
-            vec4 finalColor = mix(textureColor, vec4(greenColor, 1.0), isFront);
-            // vec4 finalColor = mix(transparentColor, vec4(greenColor, 1.0), isFront);
+            // Enhanced shading based on rotation
+            float shade = mix(1.0, 0.7, abs(sin(angle)));
             
-            // Add shading based on rotation to enhance 3D effect
-            float shade = mix(1.0, 0.8, abs(sin(angle)));
-            gl_FragColor = vec4(finalColor.rgb * shade, 1.0);
-            // no shading
-            gl_FragColor = finalColor;
-            // Just the image
-            //gl_FragColor = texture2D(uSampler0, vTextureCoord);
+            // Add edge highlighting
+            float edgeHighlight = pow(abs(sin(angle)), 4.0) * 0.3;
+            
+            // Mix colors based on rotation
+            vec4 frontColor = vec4(greenColor * shade + vec3(edgeHighlight), 1.0);
+            vec4 backColor = vec4(textureColor.rgb * shade + vec3(edgeHighlight), 1.0);
+            
+            // Determine final color with proper front/back visibility
+            vec4 finalColor = mix(backColor, frontColor, isFront);
+            
+            // Add transparency during rotation to enhance 3D effect
+            float alpha = mix(1.0, 0.0, pow(abs(sin(angle)), 0.5));
+            alpha = mix(1.0, alpha, step(0.01, abs(sin(angle))));
+            
+            gl_FragColor = vec4(finalColor.rgb, alpha);
         }
     `;
 
@@ -155,7 +170,7 @@ window.addEventListener('load', () => {
         const bounds = image.getBoundingClientRect();
         
         // Fixed grid size of 10 pixels
-        const GRID_SIZE = 10;
+        const GRID_SIZE = 20;
         
         // Calculate number of grid cells
         const numCellsX = Math.floor(bounds.width / GRID_SIZE);

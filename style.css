@@ -50,7 +50,7 @@ body {
     opacity: 0;
 }
 
-.curtains-canvas {
+#curtains-canvas {
     position: fixed;
     top: 0;
     left: 0;
@@ -58,4 +58,8 @@ body {
     height: 100%;
     pointer-events: none;
     z-index: 100;
+}
+
+.no-curtains .entry-effect {
+    opacity: 1 !important;
 }

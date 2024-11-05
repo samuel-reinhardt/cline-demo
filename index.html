@@ -9,6 +9,13 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
 </head>
 <body>
+    <!-- Dev mode controls -->
+    <div id="dev-controls" class="dev-controls" style="display: none;">
+        <label for="timeline-slider">Animation Progress</label>
+        <input type="range" id="timeline-slider" min="0" max="100" value="0" step="1">
+        <span id="progress-value">0%</span>
+    </div>
+
     <div class="content">
         <section class="spacer">
             <h1>Scroll Down</h1>
@@ -41,6 +48,6 @@
             <p>Scroll back up to see the reverse effect</p>
         </section>
     </div>
-    <script src="index.js"></script>
+    <script type="module" src="main.js"></script>
 </body>
 </html>

@@ -1,4 +1,15 @@
 window.addEventListener('load', () => {
+    // Check if we're in dev mode
+    const isDevMode = new URLSearchParams(window.location.search).has('dev');
+    const devControls = document.getElementById('dev-controls');
+    const timelineSlider = document.getElementById('timeline-slider');
+    const progressValue = document.getElementById('progress-value');
+
+    // Show dev controls if in dev mode
+    if (isDevMode && devControls) {
+        devControls.style.display = 'flex';
+    }
+
     // Create canvas container first
     const container = document.createElement('div');
     container.id = 'curtains-canvas';
@@ -30,7 +41,7 @@ window.addEventListener('load', () => {
         }
     `;
 
-    // Fragment shader with enhanced 3D flip animation
+    // Fragment shader with true 3D flip animation
     const fs = `
         precision mediump float;
         
@@ -53,7 +64,13 @@ window.addEventListener('load', () => {
             vec2 diff = currentGrid - originGrid;
             float distance = sqrt(diff.x * diff.x + diff.y * diff.y);
             float maxDistance = sqrt(maxGrid.x * maxGrid.x + maxGrid.y * maxGrid.y);
-            return (distance / maxDistance) * 0.75;
+            return (distance / maxDistance) * 1.2;
+        }
+        
+        // Smooth step function for more natural transitions
+        float smootherstep(float edge0, float edge1, float x) {
+            x = clamp((x - edge0) / (edge1 - edge0), 0.0, 1.0);
+            return x * x * x * (x * (x * 6.0 - 15.0) + 10.0);
         }
         
         void main() {
@@ -72,7 +89,7 @@ window.addEventListener('load', () => {
             float delay = calculateDelay(gridCoord, originGrid, totalGrid);
             
             // Calculate local animation progress with delay
-            float localProgress = clamp((uAnimationProgress - delay) * 1.5, 0.0, 1.0);
+            float localProgress = smootherstep(0.0, 1.0, clamp((uAnimationProgress * 1.5 - delay), 0.0, 1.0));
             
             // Calculate rotation angle (0 to PI for 180-degree rotation)
             float angle = localProgress * PI;
@@ -83,48 +100,52 @@ window.addEventListener('load', () => {
             // Apply 3D perspective transformation
             vec2 fromCenter = cellPosition - center;
             
-            // Enhanced perspective effect
+            // Enhanced perspective effect during rotation
             float perspectiveStrength = 2.0;
             float z = sin(angle) * perspectiveStrength;
             float perspective = 1.0 / (1.0 + z * 0.5);
             
-            // Scale and transform based on rotation
+            // Scale based on rotation angle
             fromCenter.x *= cos(angle);
             vec2 perspectivePos = center + fromCenter * perspective;
             
-            // Determine if we're showing front or back
-            float isFront = step(0.0, cos(angle));
+            // Calculate UV coordinates for texture sampling
+            vec2 uv = perspectivePos * uGridSize / uImageSize + floor(vTextureCoord * uImageSize / uGridSize) * uGridSize / uImageSize;
             
-            // Sample the texture for the back side
-            vec4 textureColor = texture2D(uSampler0, vTextureCoord);
+            // Sample the texture
+            vec4 textureColor = texture2D(uSampler0, uv);
             
-            // Define green colors for the front side with slight variations
+            // Define green colors for the front side
             vec3 greenColor;
             float rnd = random(gridCoord);
             if (rnd < 0.33) {
-                greenColor = vec3(0.0, 0.91, 0.52); // Bright green
+                greenColor = vec3(0.0, 0.91, 0.52);
             } else if (rnd < 0.66) {
-                greenColor = vec3(0.0, 0.74, 0.42); // Medium green
+                greenColor = vec3(0.0, 0.74, 0.42);
             } else {
-                greenColor = vec3(0.0, 0.68, 0.39); // Dark green
+                greenColor = vec3(0.0, 0.68, 0.39);
             }
             
-            // Enhanced shading based on rotation
-            float shade = mix(1.0, 0.7, abs(sin(angle)));
+            // Calculate visibility based on angle
+            // Maximum transparency when the square is edge-on (90 degrees)
+            float edgeOnFactor = abs(sin(angle));
+            float visibility = 1.0 - pow(edgeOnFactor, 0.5);
             
-            // Add edge highlighting
-            float edgeHighlight = pow(abs(sin(angle)), 4.0) * 0.3;
+            // Determine which side is visible (front = green, back = image)
+            // Use a sharp transition between sides
+            float isFront = step(0.0, cos(angle));
             
-            // Mix colors based on rotation
-            vec4 frontColor = vec4(greenColor * shade + vec3(edgeHighlight), 1.0);
-            vec4 backColor = vec4(textureColor.rgb * shade + vec3(edgeHighlight), 1.0);
+            // Add subtle edge highlighting
+            float edgeHighlight = pow(abs(sin(angle)), 4.0) * 0.15;
             
-            // Determine final color with proper front/back visibility
+            // Mix colors based on which side is visible
+            vec4 frontColor = vec4(greenColor + vec3(edgeHighlight), 1.0);
+            vec4 backColor = vec4(textureColor.rgb, 1.0);
             vec4 finalColor = mix(backColor, frontColor, isFront);
             
-            // Add transparency during rotation to enhance 3D effect
-            float alpha = mix(1.0, 0.0, pow(abs(sin(angle)), 0.5));
-            alpha = mix(1.0, alpha, step(0.01, abs(sin(angle))));
+            // Calculate final alpha
+            // Only show one side at a time and factor in edge-on transparency
+            float alpha = visibility * step(abs(fromCenter.x), 0.5 * abs(cos(angle)));
             
             gl_FragColor = vec4(finalColor.rgb, alpha);
         }
@@ -139,31 +160,68 @@ window.addEventListener('load', () => {
         });
     });
 
-    // Create intersection observer
+    // Store all planes for dev mode control
+    const planes = [];
+
+    // Create intersection observer with two thresholds
     const observer = new IntersectionObserver((entries) => {
-        entries.forEach(entry => {
-            if (entry.isIntersecting && entry.intersectionRatio >= 0.75) {
+        // Only handle intersection events if not in dev mode
+        if (!isDevMode) {
+            entries.forEach(entry => {
                 const plane = entry.target.plane;
-                if (plane && !plane.userData.animated) {
-                    plane.userData.animated = true;
+                if (!plane) return;
+
+                // When element is at least 75% visible, start animation
+                if (entry.isIntersecting && entry.intersectionRatio >= 0.75) {
+                    if (!plane.userData.animated) {
+                        plane.userData.animated = true;
+                        gsap.to(plane.uniforms.uAnimationProgress, {
+                            value: 1,
+                            duration: 4.5,
+                            ease: "power1.inOut",
+                            overwrite: true
+                        });
+                    }
+                }
+                // When element is completely out of view, reset animation
+                else if (entry.intersectionRatio === 0) {
+                    plane.userData.animated = false;
                     gsap.to(plane.uniforms.uAnimationProgress, {
-                        value: 1,
-                        duration: 2.0,
-                        ease: "power1.inOut"
+                        value: 0,
+                        duration: 0,
+                        overwrite: true
                     });
                 }
-            }
-        });
+            });
+        }
     }, {
-        threshold: 0.75
+        threshold: [0, 0.75]
     });
 
     // Create planes after curtains is ready
     curtains.onSuccess(() => {
         document.querySelectorAll('.entry-effect').forEach(image => {
-            createPlane(image)
+            const plane = createPlane(image);
+            if (plane) {
+                planes.push(plane);
+                // Set initial opacity
+                image.style.opacity = 1;
+            }
         });
     });
+
+    // Handle dev mode slider input
+    if (isDevMode && timelineSlider) {
+        timelineSlider.addEventListener('input', (e) => {
+            const progress = parseFloat(e.target.value) / 100;
+            progressValue.textContent = `${Math.round(progress * 100)}%`;
+            
+            // Update all planes with the new progress value
+            planes.forEach(plane => {
+                plane.uniforms.uAnimationProgress.value = progress;
+            });
+        });
+    }
 
     function createPlane(image) {
         // Get image dimensions
@@ -215,8 +273,10 @@ window.addEventListener('load', () => {
             };
 
             plane.onReady(() => {
-                // Start observing the image
-                observer.observe(image);
+                // Only observe if not in dev mode
+                if (!isDevMode) {
+                    observer.observe(image);
+                }
                 
                 // Update plane dimensions on scroll
                 window.addEventListener("scroll", () => {
@@ -250,5 +310,7 @@ window.addEventListener('load', () => {
             console.error('Could not create plane');
             image.style.opacity = 1;
         }
+
+        return plane;
     }
 });

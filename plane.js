@@ -9,6 +9,23 @@ export class PlaneManager {
 
         // Create intersection observer
         this.observer = this.createObserver();
+
+        // Set up continuous time update
+        this.startTime = Date.now();
+        this.updateTime();
+    }
+
+    updateTime() {
+        // Update time uniform for all planes
+        const currentTime = (Date.now() - this.startTime) / 1000; // Convert to seconds
+        this.planes.forEach(plane => {
+            if (plane.uniforms.uTime) {
+                plane.uniforms.uTime.value = currentTime;
+            }
+        });
+
+        // Request next frame
+        requestAnimationFrame(() => this.updateTime());
     }
 
     createObserver() {
@@ -68,6 +85,11 @@ export class PlaneManager {
                 },
                 uAnimationProgress: {
                     name: "uAnimationProgress",
+                    type: "1f",
+                    value: 0
+                },
+                uTime: {
+                    name: "uTime",
                     type: "1f",
                     value: 0
                 }

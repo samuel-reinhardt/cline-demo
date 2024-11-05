@@ -26,33 +26,82 @@ export const fragmentShader = `
     uniform vec2 uImageSize;
     uniform float uGridSize;
     uniform float uAnimationProgress;
+    uniform float uTime;
     uniform sampler2D uSampler0;
     
     const float PI = 3.14159265359;
     
-    // Calculate delay based primarily on x-coordinate
-    float calculateDelay(vec2 currentGrid, vec2 maxGrid) {
-        // Focus on x-coordinate for left-to-right animation
-        float xProgress = currentGrid.x / maxGrid.x;
+    // Define our three green shades
+    const vec3 GREEN_LIGHT = vec3(0.0, 0.91, 0.522);  // #00E885
+    const vec3 GREEN_DARK = vec3(0.0, 0.447, 0.255);  // #007241
+    const vec3 GREEN_MED = vec3(0.0, 0.741, 0.42);    // #00BD6B
+    
+    // Pseudo-random function for noise
+    float random(vec2 st) {
+        return fract(sin(dot(st.xy, vec2(12.9898,78.233))) * 43758.5453123);
+    }
+    
+    // Smooth interpolation between three colors based on a value between 0 and 1
+    vec3 interpolateColors(vec3 color1, vec3 color2, vec3 color3, float t) {
+        t = t * 3.0; // Scale t to cover all three colors
+        if (t < 1.0) {
+            return mix(color1, color2, t);
+        } else if (t < 2.0) {
+            return mix(color2, color3, t - 1.0);
+        } else {
+            return mix(color3, color1, t - 2.0);
+        }
+    }
+    
+    // Select and oscillate green shade based on position and time
+    vec3 selectGreenShade(vec2 position) {
+        float r = random(position);
         
-        // Scale delay to ensure rightmost squares complete on time
-        // Reserve 0.25 for the actual flip animation
-        return xProgress * 0.75;
+        // Create a time-based oscillation (0 to 1)
+        // Slower oscillation (0.1 Hz) with random phase offset
+        float oscillation = (sin(uTime * PI + r * PI * 2.0) + 1.0) * 0.1;
+        
+        // Interpolate between the three shades based on oscillation
+        return interpolateColors(GREEN_LIGHT, GREEN_MED, GREEN_DARK, oscillation);
+    }
+    
+    // Calculate delay based on distance from top-left with organic variation
+    float calculateDelay(vec2 currentGrid, vec2 maxGrid) {
+        // Calculate normalized position (0 to 1 range)
+        vec2 normalizedPos = currentGrid / maxGrid;
+        
+        // Calculate Manhattan distance from top-left
+        float distanceFromTopLeft = normalizedPos.x + normalizedPos.y;
+        
+        // Add noise based on position
+        float noise = random(currentGrid * 0.1) * 0.15;
+        
+        // Combine distance and noise for organic wave effect
+        float delay = distanceFromTopLeft * 0.4 + noise;
+        
+        // Keep original delay range [0, 0.75] for wave effect
+        return clamp(delay, 0.0, 0.75);
     }
     
     void main() {
-        // Calculate grid cell coordinates
-        vec2 gridCoord = floor(vTextureCoord * uImageSize / uGridSize);
+        // Convert WebGL coordinates to top-left origin coordinates
+        vec2 invertedCoord = vec2(vTextureCoord.x, 1.0 - vTextureCoord.y);
+        
+        // Calculate grid cell coordinates (now using inverted Y)
+        vec2 gridCoord = floor(invertedCoord * uImageSize / uGridSize);
         vec2 cellPosition = fract(vTextureCoord * uImageSize / uGridSize);
         
         // Calculate total grid dimensions
         vec2 totalGrid = floor(uImageSize / uGridSize);
         
-        // Calculate delay based on x-coordinate
+        // Calculate delay based on distance from top-left with noise
         float delay = calculateDelay(gridCoord, totalGrid);
         
+        // Scale progress to account for maximum delay (0.75)
+        float scaledProgress = uAnimationProgress * 1.75;
+        
         // Calculate local animation progress with delay
-        float localProgress = clamp((uAnimationProgress - delay), 0.0, 1.0);
+        float localProgress = clamp((scaledProgress - delay), 0.0, 1.0);
         
         // Calculate rotation angle (0 to PI for 180-degree rotation)
         float angle = localProgress * PI;
@@ -60,6 +109,9 @@ export const fragmentShader = `
         // Center point of the cell
         vec2 center = vec2(0.5);
         vec2 fromCenter = cellPosition - center;
+        
+        // Mirror the pixels over x-axis within each cell
+        fromCenter.x = -fromCenter.x;
         
         // Calculate perspective scale based on rotation
         float scale = cos(angle);
@@ -73,12 +125,11 @@ export const fragmentShader = `
         vec2 cellUV = rotatedPos * uGridSize / uImageSize + 
                      floor(vTextureCoord * uImageSize / uGridSize) * uGridSize / uImageSize;
         
-        // Always flip texture coordinates initially (back side starts visible)
-        vec2 flippedUV = vec2(1.0 - cellUV.x, cellUV.y);
-        vec4 textureColor = texture2D(uSampler0, flippedUV);
+        vec2 textureUV = vec2(cellUV.x, cellUV.y);
+        vec4 textureColor = texture2D(uSampler0, textureUV);
         
-        // Define green color for front side
-        vec3 greenColor = vec3(0.0, 0.85, 0.45);
+        // Select and oscillate green shade for this square
+        vec3 greenColor = selectGreenShade(gridCoord);
         
         // Determine which side is visible based on rotation
         float isFront = step(0.0, cos(angle));
@@ -91,12 +142,6 @@ export const fragmentShader = `
         // Calculate visibility of the square
         float edgeVisibility = step(abs(fromCenter.x), 0.5 * abs(scale));
         
-        // Calculate transparency at the edge-on state (90 degrees)
-        float edgeOnTransparency = 1.0 - abs(sin(angle));
-        
-        // Combine visibilities for final alpha
-        float alpha = edgeVisibility * (abs(scale) + 0.1);
-        
-        gl_FragColor = vec4(finalColor.rgb, alpha);
+        gl_FragColor = vec4(finalColor.rgb, edgeVisibility);
     }
 `;

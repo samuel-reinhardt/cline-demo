@@ -41,8 +41,8 @@ export class PlaneManager {
                             plane.userData.animated = true;
                             gsap.to(plane.uniforms.uAnimationProgress, {
                                 value: 1,
-                                duration: 4.5,
-                                ease: "power1.inOut",
+                                duration: 2,
+                                ease: "slow(0.1,0.7,false)",
                                 overwrite: true
                             });
                         }
